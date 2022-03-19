@@ -1,3 +1,4 @@
+#![feature(exit_status_error)]
 //#![feature(generators, proc_macro_hygiene, stmt_expr_attributes)]
 // cargo-deps: async-recursion, async-process, futures-lite, time
 // You can also leave off the version number, in which case, it's assumed
@@ -6,8 +7,8 @@
 // shebang.
 // Multiple dependencies should be separated by commas:
 // // cargo-deps: time="0.1.25", libc="0.2.5"
-use anyhow::{Error, Result}; // type Result = std::result::Result<(), Box<dyn std::error::Error>>;
-                             //use async_process::{Command, Stdio};
+use anyhow::{Context, Error, Result}; // type Result = std::result::Result<(), Box<dyn std::error::Error>>;
+                                      //use async_process::{Command, Stdio};
 use std::path::{Path, PathBuf};
 
 //use futures_lite::{future, io, prelude::*};
@@ -16,45 +17,69 @@ use std::path::{Path, PathBuf};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
-use std::process::Stdio;
+use std::process::{ExitStatus, Stdio};
 use url::{Host, Position, Url};
 
 //static NOT_FOUND: Error = Error::from(io::Error::from(io::ErrorKind::NotFound));
 
+async fn git_clone(url: Url, args: &[&str]) -> tokio::io::Result<ExitStatus> {
+    Command::new("git")
+        .args(&["clone"])
+        .arg(url.as_str())
+        .args(args)
+        .status()
+        .await
+}
+async fn git_fetch() -> tokio::io::Result<ExitStatus> {
+    Command::new("git").args(&["fetch", "-p"]).status().await
+}
+async fn git_merge() -> tokio::io::Result<ExitStatus> {
+    Command::new("git").arg("merge").status().await
+}
+async fn git_config_get(path: &str) -> tokio::io::Result<std::process::Output> {
+    Command::new("git")
+        .args(&["config", "--local", "--get", path])
+        .output()
+        .await
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
-    config_remote_url().await
+    git_script().await?;
     //https2git().await
+
+    //echo "#... `pwd`    $origin"
+    //#git fetch -p #--rebase && git submodule update --init --recursive
+    //#git merge # pull --rebase && git submodule update --init --recursive
+
+    // echo "#~~~ `pwd`    $origin"
+
+    Ok(())
 }
 
 async fn git_config_remote_origin_url(url: Url) -> Result<()> {
-    println!("git-config-local remote.origin.url: {}", url);
-    // git config --local --set remote.origin.url ...
-    let status = Command::new("git")
-        .args(&["config", "--local", "remote.origin.url"])
-        .arg(url.as_str())
-        .status()
-        .await?;
+    //git config --local remote.origin.url ...
+    let mut cmd = Command::new("git");
+    cmd.args(&["config", "--local", "remote.origin.url", url.as_str()]); //.arg(url.as_str());
+    println!("{:?}", cmd);
+    let status = cmd.status().await?;
     let x = status;
     //TODO: Error::from(std::io::Error::from(std::io::ErrorKind::NotFound))
 
     Ok(())
 }
-async fn config_get_remote_url() -> Result<Url> {
-    // git config --local --get remote.origin.url
-    async fn config_get_1() -> Result<Url> {
-        let output = Command::new("git")
-            .args(&["config", "--local", "--get", "remote.origin.url"])
-            .output();
 
-        let output = output.await?;
+async fn config_get_remote_origin_url() -> Result<Url> {
+    // git config --local --get remote.origin.url
+    // git remote get-url origin
+    async fn origin_url() -> Result<Url> {
+        let output = git_config_get("remote.origin.url").await?;
         if !output.status.success() {
             panic!("{:?}", output);
         }
-        let output = output.stdout.as_slice();
-        // output.lines()
-        let url = Url::parse(std::str::from_utf8(output).unwrap())?;
-        return Ok(url);
+        let output = output.stdout.as_slice(); // output.lines()
+        let output = std::str::from_utf8(output)?;
+        Url::parse(output).context(String::from(output)) //.map_err(|e| e.into())
     }
     //async fn config_get_2() -> Result<Url> {
     //    let output = Command::new("git")
@@ -71,33 +96,41 @@ async fn config_get_remote_url() -> Result<Url> {
     //    let url = Url::parse(std::str::from_utf8(output.stdout.as_slice()).unwrap())?;
     //    return Ok(Url::from(""));
     //}
-    config_get_1().await
+    origin_url().await
 }
 
-async fn config_remote_url() -> Result<()> {
+async fn git_script() -> Result<()> {
     fn fix_url(mut url: Url) -> Url {
-        url.set_scheme("https").unwrap();
+        if url.scheme() == "git" && url.host() == Some(Host::Domain("github.com")) {
+            //url.set_scheme("https").expect();
+            let mut u = Url::parse("https://github.com").unwrap();
+            u.set_path(url.path());
+            url = u;
+        }
         //https://gh.api.99988866.xyz/https://github.com/rust-lang/crates.io-index
         let mut nurl = Url::parse("https://gh.api.99988866.xyz/").unwrap();
         nurl.set_path(url.as_str());
         nurl
     }
     //let target = std::env::args().nth(1); //.map(PathBuf::from);
-    return if let Some(target) = std::env::args().nth(1) {
-        let url = Url::parse(&target)?; //.map(PathBuf::from);
+    if let Some(giturl) = std::env::args().nth(1) {
+        let url = Url::parse(&giturl)?; //.map(PathBuf::from);
         assert!(url.host() == Some(Host::Domain("github.com")));
-        git_config_remote_origin_url(fix_url(url)).await
+        git_clone(url, &["--depth", "1"]).await?.exit_ok()?;
     } else {
-        let url = config_get_remote_url().await?;
+        let url = config_get_remote_origin_url().await?;
         match url.host() {
-            Some(Host::Domain("github.com")) => git_config_remote_origin_url(fix_url(url)).await,
-            Some(Host::Domain("gh.api.99988866.xyz")) => Ok(()),
+            Some(Host::Domain("github.com")) => git_config_remote_origin_url(fix_url(url)).await?,
+            Some(Host::Domain("gh.api.99988866.xyz")) => {}
             _ => {
                 panic!("{}: gh.api.99988866.xyz/github.com/", url)
                 //Error::from(std::io::Error::from(std::io::ErrorKind::NotFound))
             }
         }
-    };
+        git_fetch().await?.exit_ok()?;
+        git_merge().await?.exit_ok()?;
+    }
+    Ok(())
 
     // let not_found = Error::from(io::Error::from(io::ErrorKind::NotFound));
     // let conf = resolv_config(&target).ok_or(not_found)?;
