@@ -7,6 +7,8 @@
 // shebang.
 // Multiple dependencies should be separated by commas:
 // // cargo-deps: time="0.1.25", libc="0.2.5"
+#[macro_use(defer)]
+extern crate scopeguard;
 use anyhow::{Context, Error, Result}; // type Result = std::result::Result<(), Box<dyn std::error::Error>>;
                                       //use async_process::{Command, Stdio};
 use std::path::{Path, PathBuf};
@@ -47,13 +49,6 @@ async fn git_config_get(path: &str) -> tokio::io::Result<std::process::Output> {
 async fn main() -> Result<()> {
     git_script().await?;
     //https2git().await
-
-    //echo "#... `pwd`    $origin"
-    //#git fetch -p #--rebase && git submodule update --init --recursive
-    //#git merge # pull --rebase && git submodule update --init --recursive
-
-    // echo "#~~~ `pwd`    $origin"
-
     Ok(())
 }
 
@@ -66,6 +61,42 @@ async fn git_config_remote_origin_url(url: Url) -> Result<()> {
     let x = status;
     //TODO: Error::from(std::io::Error::from(std::io::ErrorKind::NotFound))
 
+    Ok(())
+}
+async fn git_pull() -> Result<()> {
+    fn fix_url(mut url: Url) -> Url {
+        if url.scheme() == "git" && url.host() == Some(Host::Domain("github.com")) {
+            //url.set_scheme("https").expect();
+            let mut u = Url::parse("https://github.com").unwrap();
+            u.set_path(url.path());
+            url = u;
+        }
+        //https://gh.api.99988866.xyz/https://github.com/rust-lang/crates.io-index
+        let mut nurl = Url::parse("https://gh.api.99988866.xyz/").unwrap();
+        nurl.set_path(url.as_str());
+        nurl
+    }
+    let url = config_get_remote_origin_url().await?;
+    match url.host() {
+        Some(Host::Domain("github.com")) => git_config_remote_origin_url(fix_url(url)).await?,
+        Some(Host::Domain("gh.api.99988866.xyz")) => {}
+        _ => {
+            panic!("{}: gh.api.99988866.xyz/github.com/", url)
+            //Error::from(std::io::Error::from(std::io::ErrorKind::NotFound))
+        }
+    }
+
+    let url = config_get_remote_origin_url().await?;
+    let current_dir = std::env::current_dir().unwrap();
+    println!("#... `{}`    {}", current_dir.display(), url);
+    //defer! {}
+    let _guard = scopeguard::guard(url, |url| {
+        println!("#~~~ `{}`    {}", current_dir.display(), url);
+        //#git fetch -p #--rebase && git submodule update --init --recursive
+        //#git merge # pull --rebase && git submodule update --init --recursive
+    });
+    git_fetch().await?.exit_ok()?;
+    git_merge().await?.exit_ok()?;
     Ok(())
 }
 
@@ -100,37 +131,24 @@ async fn config_get_remote_origin_url() -> Result<Url> {
 }
 
 async fn git_script() -> Result<()> {
-    fn fix_url(mut url: Url) -> Url {
-        if url.scheme() == "git" && url.host() == Some(Host::Domain("github.com")) {
-            //url.set_scheme("https").expect();
-            let mut u = Url::parse("https://github.com").unwrap();
-            u.set_path(url.path());
-            url = u;
-        }
-        //https://gh.api.99988866.xyz/https://github.com/rust-lang/crates.io-index
-        let mut nurl = Url::parse("https://gh.api.99988866.xyz/").unwrap();
-        nurl.set_path(url.as_str());
-        nurl
-    }
     //let target = std::env::args().nth(1); //.map(PathBuf::from);
     if let Some(giturl) = std::env::args().nth(1) {
-        let url = Url::parse(&giturl)?; //.map(PathBuf::from);
-        assert!(url.host() == Some(Host::Domain("github.com")));
-        git_clone(url, &["--depth", "1"]).await?.exit_ok()?;
-    } else {
-        let url = config_get_remote_origin_url().await?;
-        match url.host() {
-            Some(Host::Domain("github.com")) => git_config_remote_origin_url(fix_url(url)).await?,
-            Some(Host::Domain("gh.api.99988866.xyz")) => {}
-            _ => {
-                panic!("{}: gh.api.99988866.xyz/github.com/", url)
-                //Error::from(std::io::Error::from(std::io::ErrorKind::NotFound))
+        if let Ok(url) = Url::parse(&giturl) {
+            assert!(url.scheme() == "https");
+            assert!(url.host() == Some(Host::Domain("github.com")));
+            git_clone(url, &["--depth", "1"]).await?.exit_ok()?;
+        } else {
+            let path = PathBuf::from(&giturl);
+            if !path.exists() {
+                panic!("{}", giturl);
             }
+            std::env::set_current_dir(&path).unwrap();
+            git_pull().await?;
         }
-        git_fetch().await?.exit_ok()?;
-        git_merge().await?.exit_ok()?;
+        Ok(())
+    } else {
+        git_pull().await
     }
-    Ok(())
 
     // let not_found = Error::from(io::Error::from(io::ErrorKind::NotFound));
     // let conf = resolv_config(&target).ok_or(not_found)?;

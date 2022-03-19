@@ -1,5 +1,5 @@
 [package]
-name = "git-script"
+name = "git-clone-or-pull"
 version = "0.1.0"
 authors = ["jywww <jywww@qq.com>"]
 edition = "2018"
@@ -11,6 +11,7 @@ async-recursion = "1"
 anyhow = "1"
 url = "2"
 glob = "*"
+scopeguard = "1"
 futures = "0.3"
 # futures-async-stream = "0.2"
 
