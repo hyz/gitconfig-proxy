@@ -1,4 +1,4 @@
-#![feature(generators, proc_macro_hygiene, stmt_expr_attributes)]
+//#![feature(generators, proc_macro_hygiene, stmt_expr_attributes)]
 // cargo-deps: async-recursion, async-process, futures-lite, time
 // You can also leave off the version number, in which case, it's assumed
 // to be "*".  Also, the `cargo-deps` comment *must* be a single-line
@@ -7,142 +7,156 @@
 // Multiple dependencies should be separated by commas:
 // // cargo-deps: time="0.1.25", libc="0.2.5"
 use anyhow::{Error, Result}; // type Result = std::result::Result<(), Box<dyn std::error::Error>>;
-use async_process::{Command, Stdio};
+                             //use async_process::{Command, Stdio};
 use std::path::{Path, PathBuf};
 
 //use futures_lite::{future, io, prelude::*};
-use futures::stream::Stream;
-use futures_async_stream::stream;
+//use futures::stream::Stream;
+//use futures_async_stream::stream;
+use tokio::io::{AsyncBufRead, AsyncBufReadExt, BufReader};
+use tokio::process::Command;
+
+use std::process::Stdio;
+use url::{Host, Position, Url};
 
 //static NOT_FOUND: Error = Error::from(io::Error::from(io::ErrorKind::NotFound));
 
-fn resolv_config(path: &Path) -> Option<PathBuf> {
-    fn resolv(path: &Path) -> Option<PathBuf> {
-        //path.components().count();
-        for a in path.ancestors().take(2) {
-            //println!("{} {}", a.display(), a.exists());
-            if a.exists() && a.join(".git/config").exists() {
-                return Some(a.into());
-            }
-        }
-        return None;
-    }
-
-    if path.is_file() {
-        if path.ends_with(".git/config") {
-            let mut pb = path.to_path_buf();
-            pb.pop();
-            pb.pop();
-            return Some(pb); //(path.into());
-        } else {
-            return path.parent().and_then(resolv);
-        }
-    }
-    return resolv(path);
+#[tokio::main]
+async fn main() -> Result<()> {
+    config_remote_url().await
+    //https2git().await
 }
-
-fn main() -> Result<()> {
-    future::block_on(https2git())
-}
-
-use url::{Host, Position, Url};
 
 async fn config_set_remote_url(url: Url) -> Result<()> {
+    println!("git-config-local remote.origin.url: {}", url);
+    // git config --local --set remote.origin.url ...
+    let status = Command::new("git")
+        .args(&["config", "--local", "remote.origin.url"])
+        .arg(url.as_str())
+        .status()
+        .await?;
+    let x = status;
     Ok(())
 }
 async fn config_get_remote_url() -> Result<Url> {
-    //let issue_list_url = Url::parse("https://github.com/rust-lang/rust/issues?labels=E-easy&state=open")?;
     // git config --local --get remote.origin.url
-    let mut gitx = Command::new("git");
-    gitx.args(&["config", "--local", "--get", "remote.origin.url"]); // sed -p -i '/^\s*url\s*=\s*https:/s/https:/git:/' $1/.git/config
+    async fn config_get_1() -> Result<Url> {
+        let output = Command::new("git")
+            .args(&["config", "--local", "--get", "remote.origin.url"])
+            .output();
 
-    run(&mut gitx, None).await
+        let output = output.await?;
+        if !output.status.success() {
+            panic!("{:?}", output);
+        }
+        let output = output.stdout.as_slice();
+        // output.lines()
+        let url = Url::parse(std::str::from_utf8(output).unwrap())?;
+        return Ok(url);
+    }
+    //async fn config_get_2() -> Result<Url> {
+    //    let output = Command::new("git")
+    //        .args(&["config", "--local", "--get", "remote.origin.url"])
+    //        .stdout(Stdio::piped())
+    //        .spawn()?;
+
+    //    let output = output.stdout.take()?;
+    //    output.
+
+    //    if !output.status.success() {
+    //        panic!("{:?}", output);
+    //    }
+    //    let url = Url::parse(std::str::from_utf8(output.stdout.as_slice()).unwrap())?;
+    //    return Ok(Url::from(""));
+    //}
+    config_get_1().await
 }
 
 async fn config_remote_url() -> Result<()> {
-    fn fix_url(url: Url) -> Url {
-        url
+    fn fix_url(mut url: Url) -> Url {
+        url.set_scheme("https").unwrap();
+        //https://gh.api.99988866.xyz/https://github.com/rust-lang/crates.io-index
+        let mut nurl = Url::parse("https://gh.api.99988866.xyz/").unwrap();
+        nurl.set_path(url.as_str());
+        nurl
     }
     //let target = std::env::args().nth(1); //.map(PathBuf::from);
-    if let Some(target) = std::env::args().nth(1) {
+    return if let Some(target) = std::env::args().nth(1) {
         let url = Url::parse(&target)?; //.map(PathBuf::from);
         assert!(url.host() == Some(Host::Domain("github.com")));
-        let url = fix_url(url);
-        config_set_remote_url(url).await
+        config_set_remote_url(fix_url(url)).await
     } else {
         let url = config_get_remote_url().await?;
         match url.host() {
-            Some(Host::Domain("github.com")) => {
-                let url = fix_url(url);
-                config_set_remote_url(url).await
-            }
-            Some(Host::Domain("gh.api.99988866.xyz")) => {}
+            Some(Host::Domain("github.com")) => config_set_remote_url(fix_url(url)).await,
+            Some(Host::Domain("gh.api.99988866.xyz")) => Ok(()),
             _ => {
-                eprintln!("{}: gh.api.99988866.xyz/github.com/", url)
+                panic!("{}: gh.api.99988866.xyz/github.com/", url)
+                //Error::from(std::io::Error::from(std::io::ErrorKind::NotFound))
             }
         }
     };
 
-    let not_found = Error::from(io::Error::from(io::ErrorKind::NotFound));
-    let conf = resolv_config(&target).ok_or(not_found)?;
+    // let not_found = Error::from(io::Error::from(io::ErrorKind::NotFound));
+    // let conf = resolv_config(&target).ok_or(not_found)?;
 
-    let home = std::env::var("HOME").map(PathBuf::from)?;
-    if !conf.exists() || conf.canonicalize()? == home {
-        panic!("invalid: {}", target.display());
-    }
+    // let home = std::env::var("HOME").map(PathBuf::from)?;
+    // if !conf.exists() || conf.canonicalize()? == home {
+    //     panic!("invalid: {}", target.display());
+    // }
 
-    let mut gitx = Command::new("sed");
-    gitx.args(&[
-        "-i",
-        r"/^\s*url\s*=\s*https:/s/https:/git:/",
-        conf.join(".git/config").to_string_lossy().as_ref(),
-    ]); // sed -p -i '/^\s*url\s*=\s*https:/s/https:/git:/' $1/.git/config
+    // let mut gitx = Command::new("sed");
+    // gitx.args(&[
+    //     "-i",
+    //     r"/^\s*url\s*=\s*https:/s/https:/git:/",
+    //     conf.join(".git/config").to_string_lossy().as_ref(),
+    // ]); // sed -p -i '/^\s*url\s*=\s*https:/s/https:/git:/' $1/.git/config
 
-    run(&mut gitx, None).await
+    // run(&mut gitx, None).await
 }
-async fn https2git() -> Result<()> {
-    let target = std::env::args_os()
-        .nth(1)
-        .map(PathBuf::from)
-        .expect("... <config>"); //Path::new(&arg1);
-    if !target.exists() {
-        panic!("not exists: {}", target.display());
-    }
-    let not_found = Error::from(io::Error::from(io::ErrorKind::NotFound));
-    let conf = resolv_config(&target).ok_or(not_found)?;
+//  async fn https2git() -> Result<()> {
+//  let target = std::env::args_os()
+//  .nth(1)
+//  .map(PathBuf::from)
+//  .expect("... <config>"); //Path::new(&arg1);
+//  if !target.exists() {
+//  panic!("not exists: {}", target.display());
+//  }
+//  let not_found = Error::from(io::Error::from(io::ErrorKind::NotFound));
+//  let conf = resolv_config(&target).ok_or(not_found)?;
 
-    let home = std::env::var("HOME").map(PathBuf::from)?;
-    if !conf.exists() || conf.canonicalize()? == home {
-        panic!("invalid: {}", target.display());
-    }
+//  let home = std::env::var("HOME").map(PathBuf::from)?;
+//  if !conf.exists() || conf.canonicalize()? == home {
+//  panic!("invalid: {}", target.display());
+//  }
 
-    let mut gitx = Command::new("sed");
-    gitx.args(&[
-        "-i",
-        r"/^\s*url\s*=\s*https:/s/https:/git:/",
-        conf.join(".git/config").to_string_lossy().as_ref(),
-    ]); // sed -p -i '/^\s*url\s*=\s*https:/s/https:/git:/' $1/.git/config
+//  let mut gitx = Command::new("sed");
+//  gitx.args(&[
+//  "-i",
+//  r"/^\s*url\s*=\s*https:/s/https:/git:/",
+//  conf.join(".git/config").to_string_lossy().as_ref(),
+//  ]); // sed -p -i '/^\s*url\s*=\s*https:/s/https:/git:/' $1/.git/config
 
-    run(&mut gitx, None).await
-}
+//  run(&mut gitx, None).await
+//  }
 
-#[async_recursion::async_recursion]
-async fn run(gitx: &mut Command, opt: Option<String>) -> Result<()> {
-    if let Some(_) = opt {
-        return run(gitx, None).await;
-    }
-    println!("{:?}", gitx);
+//  #[async_recursion::async_recursion]
+//  async fn run(gitx: &mut Command, opt: Option<String>) -> Result<()> {
+//  if let Some(_) = opt {
+//  return run(gitx, None).await;
+//  }
+//  println!("{:?}", gitx);
 
-    let mut child = gitx.stdout(Stdio::piped()).spawn()?;
-    //println!("{:?}", child);
+//  let mut child = gitx.stdout(Stdio::piped()).spawn()?;
+//  //println!("{:?}", child);
 
-    let mut lines = io::BufReader::new(child.stdout.take().unwrap()).lines();
-    while let Some(line) = lines.next().await {
-        println!("{}", line?);
-    }
+//  let mut lines = io::BufReader::new(child.stdout.take().unwrap()).lines();
+//  while let Some(line) = lines.next().await {
+//  println!("{}", line?);
+//  }
 
-    std::process::exit(child.status().await.unwrap().code().unwrap()) //Ok(())
-}
+//  std::process::exit(child.status().await.unwrap().code().unwrap()) //Ok(())
+//  }
 
 // fn replace_https(uri: String) -> String {
 //     if uri.starts_with("https") {
@@ -308,3 +322,28 @@ async fn run(gitx: &mut Command, opt: Option<String>) -> Result<()> {
 //     }
 //     Ok(())
 // }
+
+fn resolv_config(path: &Path) -> Option<PathBuf> {
+    fn resolv(path: &Path) -> Option<PathBuf> {
+        //path.components().count();
+        for a in path.ancestors().take(2) {
+            //println!("{} {}", a.display(), a.exists());
+            if a.exists() && a.join(".git/config").exists() {
+                return Some(a.into());
+            }
+        }
+        return None;
+    }
+
+    if path.is_file() {
+        if path.ends_with(".git/config") {
+            let mut pb = path.to_path_buf();
+            pb.pop();
+            pb.pop();
+            return Some(pb); //(path.into());
+        } else {
+            return path.parent().and_then(resolv);
+        }
+    }
+    return resolv(path);
+}
