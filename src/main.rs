@@ -27,7 +27,7 @@ async fn main() -> Result<()> {
     //https2git().await
 }
 
-async fn config_set_remote_url(url: Url) -> Result<()> {
+async fn git_config_remote_origin_url(url: Url) -> Result<()> {
     println!("git-config-local remote.origin.url: {}", url);
     // git config --local --set remote.origin.url ...
     let status = Command::new("git")
@@ -36,6 +36,8 @@ async fn config_set_remote_url(url: Url) -> Result<()> {
         .status()
         .await?;
     let x = status;
+    //TODO: Error::from(std::io::Error::from(std::io::ErrorKind::NotFound))
+
     Ok(())
 }
 async fn config_get_remote_url() -> Result<Url> {
@@ -84,11 +86,11 @@ async fn config_remote_url() -> Result<()> {
     return if let Some(target) = std::env::args().nth(1) {
         let url = Url::parse(&target)?; //.map(PathBuf::from);
         assert!(url.host() == Some(Host::Domain("github.com")));
-        config_set_remote_url(fix_url(url)).await
+        git_config_remote_origin_url(fix_url(url)).await
     } else {
         let url = config_get_remote_url().await?;
         match url.host() {
-            Some(Host::Domain("github.com")) => config_set_remote_url(fix_url(url)).await,
+            Some(Host::Domain("github.com")) => git_config_remote_origin_url(fix_url(url)).await,
             Some(Host::Domain("gh.api.99988866.xyz")) => Ok(()),
             _ => {
                 panic!("{}: gh.api.99988866.xyz/github.com/", url)
