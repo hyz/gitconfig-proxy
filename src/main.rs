@@ -24,13 +24,25 @@ use url::{Host, Position, Url};
 
 //static NOT_FOUND: Error = Error::from(io::Error::from(io::ErrorKind::NotFound));
 
-async fn git_clone(url: Url, args: &[&str]) -> tokio::io::Result<ExitStatus> {
-    Command::new("git")
-        .args(&["clone"])
-        .arg(url.as_str())
-        .args(args)
-        .status()
-        .await
+#[tokio::main]
+async fn main() -> Result<()> {
+    clone_or_pull().await?;
+    //https2git().await
+    Ok(())
+}
+
+async fn git_clone<I, S, P>(args: I, url: &Url, path: Option<P>) -> tokio::io::Result<ExitStatus>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<std::ffi::OsStr>,
+    P: AsRef<Path>,
+{
+    let mut cmd = Command::new("git");
+    cmd.args(&["clone"]).args(args).arg(url.as_str());
+    if let Some(path) = path {
+        cmd.arg(path.as_ref().as_os_str());
+    }
+    cmd.status().await
 }
 async fn git_fetch() -> tokio::io::Result<ExitStatus> {
     Command::new("git").args(&["fetch", "-p"]).status().await
@@ -44,41 +56,37 @@ async fn git_config_get(path: &str) -> tokio::io::Result<std::process::Output> {
         .output()
         .await
 }
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    git_script().await?;
-    //https2git().await
-    Ok(())
+async fn git_log_1() -> tokio::io::Result<ExitStatus> {
+    Command::new("git").arg("log").args(&["-1"]).status().await
 }
 
 async fn git_config_remote_origin_url(url: Url) -> Result<()> {
     //git config --local remote.origin.url ...
     let mut cmd = Command::new("git");
     cmd.args(&["config", "--local", "remote.origin.url", url.as_str()]); //.arg(url.as_str());
-    println!("{:?}", cmd);
+                                                                         //println!("{:?}", cmd);
     let status = cmd.status().await?;
     let x = status;
     //TODO: Error::from(std::io::Error::from(std::io::ErrorKind::NotFound))
 
     Ok(())
 }
-async fn git_pull() -> Result<()> {
-    fn fix_url(mut url: Url) -> Url {
-        if url.scheme() == "git" && url.host() == Some(Host::Domain("github.com")) {
-            //url.set_scheme("https").expect();
-            let mut u = Url::parse("https://github.com").unwrap();
-            u.set_path(url.path());
-            url = u;
-        }
-        //https://gh.api.99988866.xyz/https://github.com/rust-lang/crates.io-index
-        let mut nurl = Url::parse("https://gh.api.99988866.xyz/").unwrap();
-        nurl.set_path(url.as_str());
-        nurl
+fn modify_url(mut url: Url) -> Url {
+    if url.scheme() == "git" && url.host() == Some(Host::Domain("github.com")) {
+        //url.set_scheme("https").expect();
+        let mut u = Url::parse("https://github.com").unwrap();
+        u.set_path(url.path());
+        url = u;
     }
+    //https://gh.api.99988866.xyz/https://github.com/rust-lang/crates.io-index
+    let mut nurl = Url::parse("https://gh.api.99988866.xyz/").unwrap();
+    nurl.set_path(url.as_str());
+    nurl
+}
+async fn git_pull() -> Result<()> {
     let url = config_get_remote_origin_url().await?;
     match url.host() {
-        Some(Host::Domain("github.com")) => git_config_remote_origin_url(fix_url(url)).await?,
+        Some(Host::Domain("github.com")) => git_config_remote_origin_url(modify_url(url)).await?,
         Some(Host::Domain("gh.api.99988866.xyz")) => {}
         _ => {
             panic!("{}: gh.api.99988866.xyz/github.com/", url)
@@ -88,15 +96,16 @@ async fn git_pull() -> Result<()> {
 
     let url = config_get_remote_origin_url().await?;
     let current_dir = std::env::current_dir().unwrap();
-    println!("#... `{}`    {}", current_dir.display(), url);
+    println!("# {}\t{}", current_dir.display(), url);
     //defer! {}
     let _guard = scopeguard::guard(url, |url| {
-        println!("#~~~ `{}`    {}", current_dir.display(), url);
+        println!("#=== {}\t{}", current_dir.display(), url);
         //#git fetch -p #--rebase && git submodule update --init --recursive
         //#git merge # pull --rebase && git submodule update --init --recursive
     });
     git_fetch().await?.exit_ok()?;
     git_merge().await?.exit_ok()?;
+    git_log_1().await?.exit_ok()?;
     Ok(())
 }
 
@@ -130,17 +139,38 @@ async fn config_get_remote_origin_url() -> Result<Url> {
     origin_url().await
 }
 
-async fn git_script() -> Result<()> {
+async fn clone_or_pull() -> Result<()> {
     //let target = std::env::args().nth(1); //.map(PathBuf::from);
-    if let Some(giturl) = std::env::args().nth(1) {
-        if let Ok(url) = Url::parse(&giturl) {
+    if let Some(url) = std::env::args_os().nth(1) {
+        let url = url.to_string_lossy();
+        let url = url.as_ref();
+        let lcd = std::env::args_os().nth(2);
+        let lcd = lcd.as_ref().map(Path::new);
+
+        if let Ok(mut url) = Url::parse(url) {
             assert!(url.scheme() == "https");
-            assert!(url.host() == Some(Host::Domain("github.com")));
-            git_clone(url, &["--depth", "1"]).await?.exit_ok()?;
+            assert!(matches!(
+                url.host_str(),
+                Some("github.com") | Some("gitlab.com")
+            ));
+            if url.host() == Some(Host::Domain("github.com")) {
+                url = modify_url(url);
+            }
+
+            //git_clone::<_, _, &Path>(&["--depth", "1"], url.clone(), None) // None::<&Path>
+            git_clone(&["--depth", "1"], &url, lcd).await?.exit_ok()?;
+
+            let lcd = lcd.map_or_else(
+                || url.path_segments().unwrap().last().unwrap().into(),
+                |x| x.to_string_lossy(),
+            );
+            println!("#=== {}\t{}", lcd, url);
+            //#git fetch -p #--rebase && git submodule update --init --recursive
+            //#git merge # pull --rebase
         } else {
-            let path = PathBuf::from(&giturl);
+            let path = Path::new(url);
             if !path.exists() {
-                panic!("{}", giturl);
+                panic!("{}", url);
             }
             std::env::set_current_dir(&path).unwrap();
             git_pull().await?;
