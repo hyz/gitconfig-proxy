@@ -62,7 +62,7 @@ impl Runnable for Subcommand {
     /// Start the application.
     fn run(&self) {
         let config = APP.config();
-        println!("Pull, {:?} {:?}", &config, self);
+        // println!("Pull, {:?} {:?}", &config, self);
 
         futures::executor::block_on(self.main()).unwrap();
         //main().await?;
@@ -108,6 +108,7 @@ impl Subcommand {
     }
     async fn pull(&self, cwd: &Path) -> Result<()> {
         let useurl = self.fixurl().await?;
+        println!("# {}\t{}", cwd.display(), useurl);
         git_pull().await?;
         println!("#=== {}\t{}", cwd.display(), useurl);
         Ok(())
@@ -351,36 +352,36 @@ async fn git_config_remote_origin_url(url: Url) -> Url {
 }
 
 async fn git_pull() -> Result<()> {
-    let url = git_config_get_remote_origin_url().await?;
+    // let url = git_config_get_remote_origin_url().await?;
 
-    // let url = if url.scheme() == "git" && url.host() == Some(Host::Domain("github.com")) {
-    //     git_config_remote_origin_url(schema_git_to_https(url)).await
-    // } else {
-    //     url
-    // };
+    // // let url = if url.scheme() == "git" && url.host() == Some(Host::Domain("github.com")) {
+    // //     git_config_remote_origin_url(schema_git_to_https(url)).await
+    // // } else {
+    // //     url
+    // // };
 
-    // let url = match url.host() {
-    //     Some(Host::Domain(PROXY_HOST_99988866)) => {
-    //         git_config_remote_origin_url(remove_gh_api_99988866_xyz(url)).await
-    //     }
-    //     //Some(Host::Domain(PROXY_HOST_JYWWW)) && ... => {
-    //     //    git_config_remote_origin_url(remove_jywww(url)).await
-    //     //}
-    //     Some(Host::Domain("github.com")) => {
-    //         git_config_remote_origin_url(proxy_github(url)).await ////////////////////  <<<===
-    //     }
-    //     _ => url,
-    // };
+    // // let url = match url.host() {
+    // //     Some(Host::Domain(PROXY_HOST_99988866)) => {
+    // //         git_config_remote_origin_url(remove_gh_api_99988866_xyz(url)).await
+    // //     }
+    // //     //Some(Host::Domain(PROXY_HOST_JYWWW)) && ... => {
+    // //     //    git_config_remote_origin_url(remove_jywww(url)).await
+    // //     //}
+    // //     Some(Host::Domain("github.com")) => {
+    // //         git_config_remote_origin_url(proxy_github(url)).await ////////////////////  <<<===
+    // //     }
+    // //     _ => url,
+    // // };
 
-    //let url = git_config_get_remote_origin_url().await?;
-    let current_dir = std::env::current_dir().unwrap();
-    println!("# {}\t{}", current_dir.display(), url);
-    //defer! {}
-    let _guard = scopeguard::guard(url, |url| {
-        println!("#=== {}\t{}", current_dir.display(), url);
-        //#git fetch -p #--rebase && git submodule update --init --recursive
-        //#git merge # pull --rebase && git submodule update --init --recursive
-    });
+    // //let url = git_config_get_remote_origin_url().await?;
+    // let current_dir = std::env::current_dir().unwrap();
+    // println!("# {}\t{}", current_dir.display(), url);
+    // //defer! {}
+    // let _guard = scopeguard::guard(url, |url| {
+    //     println!("#=== {}\t{}", current_dir.display(), url);
+    //     //#git fetch -p #--rebase && git submodule update --init --recursive
+    //     //#git merge # pull --rebase && git submodule update --init --recursive
+    // });
     git_fetch().await?.exit_ok()?;
     git_merge().await?.exit_ok()?;
     git_log_1().await?.exit_ok()?;

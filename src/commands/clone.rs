@@ -58,7 +58,7 @@ impl Runnable for Subcommand {
     /// Start the application.
     fn run(&self) {
         let config = APP.config();
-        println!("Clone, {:?} {:?}", &config, self);
+        //println!("Clone, {:?} {:?}", &config, self);
 
         futures::executor::block_on(self.main()).unwrap();
         //clone_or_pull().await?;
