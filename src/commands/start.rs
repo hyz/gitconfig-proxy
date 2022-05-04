@@ -25,7 +25,7 @@ impl Runnable for StartCmd {
     /// Start the application.
     fn run(&self) {
         let config = APP.config();
-        println!("Hello, {}!", &config.hello.recipient);
+        println!("Hello, {}!", &config.example.recipient);
     }
 }
 
@@ -33,12 +33,9 @@ impl config::Override<Myex2Config> for StartCmd {
     // Process the given command line options, overriding settings from
     // a configuration file using explicit flags taken from command-line
     // arguments.
-    fn override_config(
-        &self,
-        mut config: Myex2Config,
-    ) -> Result<Myex2Config, FrameworkError> {
+    fn override_config(&self, mut config: Myex2Config) -> Result<Myex2Config, FrameworkError> {
         if !self.recipient.is_empty() {
-            config.hello.recipient = self.recipient.join(" ");
+            config.example.recipient = self.recipient.join(" ");
         }
 
         Ok(config)

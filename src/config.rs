@@ -4,14 +4,19 @@
 //! application's configuration file and/or command-line options
 //! for specifying it.
 
+use config::{Config, File, FileFormat, FileSourceFile, Map, Value};
+use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
+use url::Url;
 
 /// Myex2 Configuration
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Myex2Config {
     /// An example configuration section
-    pub hello: ExampleSection,
+    pub proxy: Option<Option<Url>>,
+    /// An example configuration section
+    pub example: ExampleSection,
 }
 
 /// Default configuration settings.
@@ -20,8 +25,22 @@ pub struct Myex2Config {
 /// use `#[derive(Default)]` on Myex2Config instead.
 impl Default for Myex2Config {
     fn default() -> Self {
-        Self {
-            hello: ExampleSection::default(),
+        let cf = "__github-helper.ron"; //: &str = "github-helper.toml";
+        let cf = BaseDirs::new().and_then(|dirs| Some(dirs.config_dir().join(cf)));
+        println!("config-file: {cf:?}");
+        if let Some(cf) = cf.filter(|f| f.exists()) {
+            let config = Config::builder()
+                .add_source(File::from(cf).format(FileFormat::Ron))
+                .build()
+                .unwrap();
+            let s = config.try_deserialize::<Myex2Config>().unwrap();
+            println!("config: {s:?}");
+            s
+        } else {
+            Self {
+                proxy: None,
+                example: ExampleSection::default(),
+            }
         }
     }
 }
@@ -39,7 +58,7 @@ pub struct ExampleSection {
 impl Default for ExampleSection {
     fn default() -> Self {
         Self {
-            recipient: "world".to_owned(),
+            recipient: "=world=".to_owned(),
         }
     }
 }

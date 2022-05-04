@@ -9,15 +9,18 @@ edition = "2021"
 [dependencies]
 async-recursion = "1"
 anyhow = "1"
-url = "2"
+url = { version = "2", features = ["serde"] }
+# url = "2"
 scopeguard = "1"
 # futures-async-stream = "0.2"
 clap = { version = "3", features = ["derive"] }
 serde = { version = "1", features = ["serde_derive"] }
 thiserror = "1"
 futures = { version = "0.3", features = ["thread-pool"] }
+directories = "4"
 #glob = "*"
 #futures = "0.3"
+config = { version = "0.13", features = ["ron"] }
 
 [dependencies.tokio]
 version = "1"

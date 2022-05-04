@@ -61,8 +61,8 @@ pub struct Subcommand {
 impl Runnable for Subcommand {
     /// Start the application.
     fn run(&self) {
-        let config = APP.config();
-        // println!("Pull, {:?} {:?}", &config, self);
+        // let config = APP.config();
+        // println!("Pull, {:?} {:?}", config, self);
 
         futures::executor::block_on(self.main()).unwrap();
         //main().await?;
@@ -75,17 +75,20 @@ impl config::Override<Myex2Config> for Subcommand {
         &self,
         mut config: Myex2Config,
     ) -> std::result::Result<Myex2Config, FrameworkError> {
-        // if !self.recipient.is_empty() {
-        //     config.copu.recipient = self.recipient.join(" ");
-        // }
+        // if !self.recipient.is_empty() { config.copu.recipient = self.recipient.join(" "); }
+        if let Some(PrefixUrl(prefixurl)) = self.prefixurl.as_ref() {
+            config.proxy = Some(prefixurl.clone());
+        }
         Ok(config)
     }
 }
 
 impl Subcommand {
     async fn fixurl(&self) -> Result<Url> {
+        let config = APP.config();
+        let prefixurl = config.proxy.as_ref();
         let mut useurl = git_config_get_remote_origin_url().await?;
-        if let Some(PrefixUrl(prefixurl)) = self.prefixurl.as_ref() {
+        if let Some(prefixurl) = prefixurl {
             let path = useurl.path();
             let origin = if path.starts_with("/https:") || path.starts_with("/http:") {
                 Url::parse(path.strip_prefix('/').unwrap())?
@@ -95,11 +98,13 @@ impl Subcommand {
 
             if let Some(proxy) = prefixurl {
                 if useurl.host() != proxy.host() {
+                    // - update prefixurl
                     let url = prefix_url(proxy.clone(), &origin);
                     useurl = git_config_remote_origin_url(url).await;
                 }
             } else {
                 if useurl.host() != origin.host() {
+                    // - remove prefixurl
                     useurl = git_config_remote_origin_url(origin).await;
                 }
             }

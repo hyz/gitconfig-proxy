@@ -20,10 +20,11 @@ use self::start::StartCmd;
 use crate::config::Myex2Config;
 use abscissa_core::{config::Override, Command, Configurable, FrameworkError, Runnable};
 use clap::Parser;
-use std::path::PathBuf;
+use directories::BaseDirs;
+use std::path::{Path, PathBuf};
 
 /// Myex2 Configuration Filename
-pub const CONFIG_FILE: &str = "myex2.toml";
+pub const CONFIG_FILE: &str = "github-helper.toml";
 
 /// Myex2 Subcommands
 /// Subcommands need to be listed in an enum.
@@ -31,8 +32,11 @@ pub const CONFIG_FILE: &str = "myex2.toml";
 pub enum Myex2Cmd {
     /// The `start` subcommand
     Start(StartCmd),
+    /// The `clone` subcommand
     Clone(self::clone::Subcommand),
+    /// The `pull` subcommand
     Pull(self::pull::Subcommand),
+    /// The `prefix` subcommand
     Prefix(self::prefix::Subcommand),
 }
 
@@ -54,6 +58,7 @@ pub struct EntryPoint {
 
 impl Runnable for EntryPoint {
     fn run(&self) {
+        println!("config-path {:?}", self.config_path());
         self.cmd.run()
     }
 }
@@ -62,20 +67,11 @@ impl Runnable for EntryPoint {
 impl Configurable<Myex2Config> for EntryPoint {
     /// Location of the configuration file
     fn config_path(&self) -> Option<PathBuf> {
-        // Check if the config file exists, and if it does not, ignore it.
-        // If you'd like for a missing configuration file to be a hard error
-        // instead, always return `Some(CONFIG_FILE)` here.
-        let filename = self
-            .config
-            .as_ref()
-            .map(PathBuf::from)
-            .unwrap_or_else(|| CONFIG_FILE.into());
-
-        if filename.exists() {
-            Some(filename)
-        } else {
-            None
-        }
+        self.config.as_ref().map(PathBuf::from).or_else(|| {
+            BaseDirs::new()
+                .and_then(|dirs| Some(dirs.config_dir().join(CONFIG_FILE)).filter(|f| f.exists()))
+            //.or_else(|| Some(PathBuf::from(CONFIG_FILE)).filter(|f| f.exists()))
+        })
     }
 
     /// Apply changes to the config after it's been loaded, e.g. overriding
