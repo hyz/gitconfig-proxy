@@ -4,8 +4,9 @@
 //! application's configuration file and/or command-line options
 //! for specifying it.
 
-use config::{Config, File, FileFormat, FileSourceFile, Map, Value};
+//use config::{Config, File, FileFormat, FileSourceFile, Map, Value};
 use directories::BaseDirs;
+use ron;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -27,20 +28,20 @@ impl Default for Myex2Config {
     fn default() -> Self {
         let cf = "__github-helper.ron"; //: &str = "github-helper.toml";
         let cf = BaseDirs::new().and_then(|dirs| Some(dirs.config_dir().join(cf)));
-        println!("config-file: {cf:?}");
-        if let Some(cf) = cf.filter(|f| f.exists()) {
-            let config = Config::builder()
-                .add_source(File::from(cf).format(FileFormat::Ron))
-                .build()
-                .unwrap();
-            let s = config.try_deserialize::<Myex2Config>().unwrap();
-            println!("config: {s:?}");
-            s
-        } else {
-            Self {
-                proxy: None,
-                example: ExampleSection::default(),
-            }
+        //println!("~/.config/...: {cf:?}");
+        if let Some(f) = cf && let Ok(cf) = std::fs::OpenOptions::new().read(true).open(&f) {
+            return ron::de::from_reader::<_, Myex2Config>(cf).unwrap();
+        }
+        // if let Some(cf) = cf.filter(|f| f.exists()) {
+        //     // let config = Config::builder()
+        //     //     .add_source(File::from(cf).format(FileFormat::Ron))
+        //     //     .build()
+        //     //     .unwrap();
+        //     // config.try_deserialize::<Myex2Config>().unwrap() //dbg!()
+        // }
+        Self {
+            proxy: None,
+            example: ExampleSection::default(),
         }
     }
 }

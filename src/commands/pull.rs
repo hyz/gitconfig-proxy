@@ -61,8 +61,8 @@ pub struct Subcommand {
 impl Runnable for Subcommand {
     /// Start the application.
     fn run(&self) {
-        // let config = APP.config();
-        // println!("Pull, {:?} {:?}", config, self);
+        //let config = APP.config();
+        //println!("Pull, {config:?} {self:?}");
 
         futures::executor::block_on(self.main()).unwrap();
         //main().await?;
@@ -75,6 +75,8 @@ impl config::Override<Myex2Config> for Subcommand {
         &self,
         mut config: Myex2Config,
     ) -> std::result::Result<Myex2Config, FrameworkError> {
+        //println!("Pull:Override: {config:?} {self:?}");
+
         // if !self.recipient.is_empty() { config.copu.recipient = self.recipient.join(" "); }
         if let Some(PrefixUrl(prefixurl)) = self.prefixurl.as_ref() {
             config.proxy = Some(prefixurl.clone());

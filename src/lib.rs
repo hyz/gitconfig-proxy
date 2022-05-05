@@ -5,6 +5,7 @@
 //! [Abscissa]: https://github.com/iqlusioninc/abscissa
 
 // Tip: Deny warnings with `RUSTFLAGS="-D warnings"` environment variable in CI
+#![feature(let_chains)]
 #![feature(exit_status_error)]
 #![forbid(unsafe_code)]
 #![warn(

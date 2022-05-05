@@ -58,7 +58,7 @@ pub struct EntryPoint {
 
 impl Runnable for EntryPoint {
     fn run(&self) {
-        println!("config-path {:?}", self.config_path());
+        // println!("config-path {:?}", self.config_path());
         self.cmd.run()
     }
 }

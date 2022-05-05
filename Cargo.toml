@@ -20,7 +20,8 @@ futures = { version = "0.3", features = ["thread-pool"] }
 directories = "4"
 #glob = "*"
 #futures = "0.3"
-config = { version = "0.13", features = ["ron"] }
+#config = { version = "0.13", features = ["ron"] }
+ron = { version = "0.7" }
 
 [dependencies.tokio]
 version = "1"

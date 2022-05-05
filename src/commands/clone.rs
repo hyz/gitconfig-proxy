@@ -38,11 +38,24 @@ type Result<T, E = crate::error::Error> = std::result::Result<T, E>;
 /// for a more comprehensive example:
 ///
 /// <https://docs.rs/clap/>
+#[derive(Debug)]
+struct PrefixUrl(Option<Url>);
+fn parse_prefixurl(s: &str) -> Result<PrefixUrl> {
+    Ok(PrefixUrl(if s.is_empty() {
+        None
+    } else {
+        Some(Url::parse(s)?)
+    }))
+}
+
 #[derive(Command, Debug, Parser)]
 pub struct Subcommand {
     /// remove prefix url
-    #[clap(long, parse(try_from_str = url_parse), value_hint = ValueHint::Url)]
-    prefixurl: Option<Url>,
+    // #[clap(long, parse(try_from_str = url_parse), value_hint = ValueHint::Url)]
+    // prefixurl: Option<Url>,
+    #[clap(long, parse(try_from_str = parse_prefixurl), value_hint = ValueHint::Url)]
+    prefixurl: Option<PrefixUrl>,
+
     /// To whom are we saying copu?
     #[clap(parse(try_from_str = url_parse), value_hint = ValueHint::Url)]
     url: Url,
@@ -74,13 +87,19 @@ impl config::Override<Myex2Config> for Subcommand {
         // if !self.recipient.is_empty() {
         //     config.copu.recipient = self.recipient.join(" ");
         // }
+        if let Some(PrefixUrl(prefixurl)) = self.prefixurl.as_ref() {
+            config.proxy = Some(prefixurl.clone());
+        }
         Ok(config)
     }
 }
 
 impl Subcommand {
     async fn fixurl(&self) -> Result<Url> {
-        if let Some(proxy) = self.prefixurl.as_ref() {
+        let config = APP.config();
+        let prefixurl = config.proxy.as_ref();
+
+        if let Some(Some(proxy)) = prefixurl {
             let origin = prefix_url(proxy.clone(), &self.url);
             return Ok(git_config_remote_origin_url(origin).await);
         }
