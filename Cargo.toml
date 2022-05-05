@@ -1,5 +1,5 @@
 [package]
-name = "git-clone-or-pull"
+name = "git-clonepull"
 version = "0.1.0"
 authors = ["jywww <jywww@qq.com>"]
 edition = "2021"
