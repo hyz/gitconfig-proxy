@@ -17,7 +17,7 @@ mod start;
 
 use self::start::StartCmd;
 
-use crate::config::Myex2Config;
+use crate::config::GixConfig;
 use abscissa_core::{config::Override, Command, Configurable, FrameworkError, Runnable};
 use clap::Parser;
 use directories::BaseDirs;
@@ -64,7 +64,7 @@ impl Runnable for EntryPoint {
 }
 
 /// This trait allows you to define how application configuration is loaded.
-impl Configurable<Myex2Config> for EntryPoint {
+impl Configurable<GixConfig> for EntryPoint {
     /// Location of the configuration file
     fn config_path(&self) -> Option<PathBuf> {
         self.config.as_ref().map(PathBuf::from).or_else(|| {
@@ -79,7 +79,7 @@ impl Configurable<Myex2Config> for EntryPoint {
     ///
     /// This can be safely deleted if you don't want to override config
     /// settings from command-line options.
-    fn process_config(&self, config: Myex2Config) -> Result<Myex2Config, FrameworkError> {
+    fn process_config(&self, config: GixConfig) -> Result<GixConfig, FrameworkError> {
         match &self.cmd {
             Myex2Cmd::Start(cmd) => cmd.override_config(config),
             Myex2Cmd::Clone(cmd) => cmd.override_config(config),

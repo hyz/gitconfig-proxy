@@ -3,7 +3,7 @@
 #![deny(warnings, missing_docs, trivial_casts, unused_qualifications)]
 #![forbid(unsafe_code)]
 
-use git_clone_or_pull::application::APP;
+use git_clonepull::application::APP;
 
 /// Boot git_clone_or_pull
 #[tokio::main]

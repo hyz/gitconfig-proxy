@@ -13,7 +13,7 @@ use url::Url;
 /// Myex2 Configuration
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct Myex2Config {
+pub struct GixConfig {
     /// An example configuration section
     pub proxy: Option<Option<Url>>,
     /// An example configuration section
@@ -24,13 +24,13 @@ pub struct Myex2Config {
 ///
 /// Note: if your needs are as simple as below, you can
 /// use `#[derive(Default)]` on Myex2Config instead.
-impl Default for Myex2Config {
+impl Default for GixConfig {
     fn default() -> Self {
         let cf = "__github-helper.ron"; //: &str = "github-helper.toml";
         let cf = BaseDirs::new().and_then(|dirs| Some(dirs.config_dir().join(cf)));
         //println!("~/.config/...: {cf:?}");
         if let Some(f) = cf && let Ok(cf) = std::fs::OpenOptions::new().read(true).open(&f) {
-            return ron::de::from_reader::<_, Myex2Config>(cf).unwrap();
+            return ron::de::from_reader::<_, GixConfig>(cf).unwrap();
         }
         // if let Some(cf) = cf.filter(|f| f.exists()) {
         //     // let config = Config::builder()

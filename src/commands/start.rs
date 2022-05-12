@@ -4,7 +4,7 @@
 /// accessors along with logging macros. Customize as you see fit.
 use crate::prelude::*;
 
-use crate::config::Myex2Config;
+use crate::config::GixConfig;
 use abscissa_core::{config, Command, FrameworkError, Runnable};
 use clap::Parser;
 
@@ -29,11 +29,11 @@ impl Runnable for StartCmd {
     }
 }
 
-impl config::Override<Myex2Config> for StartCmd {
+impl config::Override<GixConfig> for StartCmd {
     // Process the given command line options, overriding settings from
     // a configuration file using explicit flags taken from command-line
     // arguments.
-    fn override_config(&self, mut config: Myex2Config) -> Result<Myex2Config, FrameworkError> {
+    fn override_config(&self, mut config: GixConfig) -> Result<GixConfig, FrameworkError> {
         if !self.recipient.is_empty() {
             config.example.recipient = self.recipient.join(" ");
         }

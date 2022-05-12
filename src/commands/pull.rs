@@ -15,8 +15,8 @@ use std::path::{Path, PathBuf};
 //use futures_lite::{future, io, prelude::*};
 //use futures::stream::Stream;
 //use futures_async_stream::stream;
-use tokio::io::{AsyncBufRead, AsyncBufReadExt, BufReader};
-use tokio::process; //::Command;
+
+use tokio::process;
 
 use std::process::{ExitStatus, Stdio};
 use url::{Host, Position, Url};
@@ -25,7 +25,7 @@ use url::{Host, Position, Url};
 /// accessors along with logging macros. Customize as you see fit.
 use crate::prelude::*;
 
-use crate::config::Myex2Config;
+use crate::config::GixConfig;
 use abscissa_core::{config, Command, FrameworkError, Runnable};
 use clap::Parser;
 
@@ -70,11 +70,11 @@ impl Runnable for Subcommand {
     }
 }
 
-impl config::Override<Myex2Config> for Subcommand {
+impl config::Override<GixConfig> for Subcommand {
     fn override_config(
         &self,
-        mut config: Myex2Config,
-    ) -> std::result::Result<Myex2Config, FrameworkError> {
+        mut config: GixConfig,
+    ) -> std::result::Result<GixConfig, FrameworkError> {
         //println!("Pull:Override: {config:?} {self:?}");
 
         // if !self.recipient.is_empty() { config.copu.recipient = self.recipient.join(" "); }
@@ -88,30 +88,40 @@ impl config::Override<Myex2Config> for Subcommand {
 impl Subcommand {
     async fn fixurl(&self) -> Result<Url> {
         let config = APP.config();
-        let prefixurl = config.proxy.as_ref();
-        let mut useurl = git_config_get_remote_origin_url().await?;
-        if let Some(prefixurl) = prefixurl {
-            let path = useurl.path();
-            let origin = if path.starts_with("/https:") || path.starts_with("/http:") {
+        let proxyurl = config.proxy.as_ref();
+
+        let origin_url = git_config_get_remote_origin_url().await?;
+        let path = origin_url.path();
+
+        if let Some(proxyurl) = proxyurl {
+            let orig =
+                if origin_url.scheme() == "git" && origin_url.host() == Some(Host::Domain("github.com")) {
+                    let base = Url::parse("https://github.com/").ok();
+                    Url::options().base_url(base.as_ref()).parse(path).unwrap()
+                    //useurl.set_scheme("https")
+                } else {
+                    origin_url.clone()
+                };
+            let orig = if path.starts_with("/https:") || path.starts_with("/http:") {
                 Url::parse(path.strip_prefix('/').unwrap())?
             } else {
-                useurl.clone()
+                orig
             };
 
-            if let Some(proxy) = prefixurl {
-                if useurl.host() != proxy.host() {
-                    // - update prefixurl
-                    let url = prefix_url(proxy.clone(), &origin);
-                    useurl = git_config_remote_origin_url(url).await;
+            if proxyurl.is_none() {
+                if orig.scheme() != origin_url.scheme() || orig.host() != origin_url.host() {
+                    // - remove proxyurl
+                    return Ok(git_config_remote_origin_url(orig).await);
                 }
-            } else {
-                if useurl.host() != origin.host() {
-                    // - remove prefixurl
-                    useurl = git_config_remote_origin_url(origin).await;
+            } else if let Some(proxy) = proxyurl {
+                if orig.host() != proxy.host() {
+                    // - update proxyurl
+                    let url = prefix_url(proxy.clone(), &orig);
+                    return Ok(git_config_remote_origin_url(url).await);
                 }
             }
         }
-        Ok(useurl)
+        Ok(origin_url)
     }
     async fn pull(&self, cwd: &Path) -> Result<()> {
         let useurl = self.fixurl().await?;
@@ -122,7 +132,7 @@ impl Subcommand {
     }
     async fn main(&self) -> Result<()> {
         let cwd = std::env::current_dir().unwrap();
-        //println!("###=== {}\t{:?}", cwd.display(), self.prefixurl);
+        println!("###=== {}\t{:?}", cwd.display(), self.repo);
         if let Some(target) = self.repo.as_ref() {
             if target == &cwd {
                 self.pull(&cwd).await
@@ -350,8 +360,7 @@ async fn git_config_get_remote_origin_url() -> Result<Url> {
 async fn git_config_remote_origin_url(url: Url) -> Url {
     //git config --local remote.origin.url ...
     let mut cmd = process::Command::new("git");
-    cmd.args(&["config", "--local", "remote.origin.url", url.as_str()]); //.arg(url.as_str());
-                                                                         //println!("{:?}", cmd);
+    cmd.args(&["config", "--local", "remote.origin.url", url.as_str()]); //.arg(url.as_str()); println!("{:?}", cmd);
     let status = cmd.status().await.unwrap();
     let x = status;
     //TODO: Error::from(std::io::Error::from(std::io::ErrorKind::NotFound))

@@ -1,6 +1,6 @@
 //! Myex2 Abscissa Application
 
-use crate::{commands::EntryPoint, config::Myex2Config};
+use crate::{commands::EntryPoint, config::GixConfig};
 use abscissa_core::{
     application::{self, AppCell},
     config::{self, CfgCell},
@@ -14,7 +14,7 @@ pub static APP: AppCell<Myex2App> = AppCell::new();
 #[derive(Debug)]
 pub struct Myex2App {
     /// Application configuration.
-    config: CfgCell<Myex2Config>,
+    config: CfgCell<GixConfig>,
 
     /// Application state.
     state: application::State<Self>,
@@ -38,13 +38,13 @@ impl Application for Myex2App {
     type Cmd = EntryPoint;
 
     /// Application configuration.
-    type Cfg = Myex2Config;
+    type Cfg = GixConfig;
 
     /// Paths to resources within the application.
     type Paths = StandardPaths;
 
     /// Accessor for application configuration.
-    fn config(&self) -> config::Reader<Myex2Config> {
+    fn config(&self) -> config::Reader<GixConfig> {
         self.config.read()
     }
 

@@ -25,7 +25,7 @@ use url::{Host, Position, Url};
 /// accessors along with logging macros. Customize as you see fit.
 use crate::prelude::*;
 
-use crate::config::Myex2Config;
+use crate::config::GixConfig;
 use abscissa_core::{config, Command, FrameworkError, Runnable};
 use clap::{Parser, ValueHint};
 
@@ -78,11 +78,11 @@ impl Runnable for Subcommand {
     }
 }
 
-impl config::Override<Myex2Config> for Subcommand {
+impl config::Override<GixConfig> for Subcommand {
     fn override_config(
         &self,
-        mut config: Myex2Config,
-    ) -> std::result::Result<Myex2Config, FrameworkError> {
+        mut config: GixConfig,
+    ) -> std::result::Result<GixConfig, FrameworkError> {
         // if !self.recipient.is_empty() {
         //     config.copu.recipient = self.recipient.join(" ");
         // }

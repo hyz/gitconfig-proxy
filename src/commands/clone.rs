@@ -1,4 +1,4 @@
-//! `copu` subcommand - example of how to write a subcommand
+// ! `copu` subcommand - example of how to write a subcommand
 //#![feature(generators, proc_macro_hygiene, stmt_expr_attributes)]
 // cargo-deps: async-recursion, async-process, futures-lite, time
 // You can also leave off the version number, in which case, it's assumed
@@ -18,14 +18,14 @@ use std::path::{Path, PathBuf};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, BufReader};
 use tokio::process; //::Command;
 
-use std::process::{ExitStatus, Stdio};
+use std::process::ExitStatus;
 use url::{Host, Position, Url};
 
 /// App-local prelude includes `app_reader()`/`app_writer()`/`app_config()`
 /// accessors along with logging macros. Customize as you see fit.
 use crate::prelude::*;
 
-use crate::config::Myex2Config;
+use crate::config::GixConfig;
 use abscissa_core::{config, Command, FrameworkError, Runnable};
 use clap::{Parser, ValueHint};
 
@@ -79,11 +79,11 @@ impl Runnable for Subcommand {
     }
 }
 
-impl config::Override<Myex2Config> for Subcommand {
+impl config::Override<GixConfig> for Subcommand {
     fn override_config(
         &self,
-        mut config: Myex2Config,
-    ) -> std::result::Result<Myex2Config, FrameworkError> {
+        mut config: GixConfig,
+    ) -> std::result::Result<GixConfig, FrameworkError> {
         // if !self.recipient.is_empty() {
         //     config.copu.recipient = self.recipient.join(" ");
         // }
