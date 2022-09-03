@@ -22,6 +22,7 @@ directories = "4"
 #futures = "0.3"
 #config = { version = "0.13", features = ["ron"] }
 ron = { version = "0.8" }
+itertools = "0.10.3"
 
 [dependencies.tokio]
 version = "1"

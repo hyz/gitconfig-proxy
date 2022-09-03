@@ -10,7 +10,10 @@
 
 //use anyhow::{Context, Error, Result}; // type Result = std::result::Result<(), Box<dyn std::error::Error>>;
 //use async_process::{Command, Stdio};
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    process::Output,
+};
 
 //use futures_lite::{future, io, prelude::*};
 //use futures::stream::Stream;
@@ -26,7 +29,7 @@ use url::{Host, Position, Url};
 use crate::prelude::*;
 
 use crate::config::GixConfig;
-use abscissa_core::{config, Command, FrameworkError, Runnable};
+use abscissa_core::{config, terminal::stdout, Command, FrameworkError, Runnable};
 use clap::Parser;
 
 type Result<T, E = crate::error::Error> = std::result::Result<T, E>;
@@ -55,7 +58,7 @@ pub struct Subcommand {
     prefixurl: Option<PrefixUrl>,
     /// repo directory
     #[clap(parse(from_os_str), value_hint = clap::ValueHint::DirPath)]
-    repo: Vec<PathBuf>,
+    repos: Vec<PathBuf>,
 }
 
 impl Runnable for Subcommand {
@@ -81,6 +84,7 @@ impl config::Override<GixConfig> for Subcommand {
         if let Some(PrefixUrl(prefixurl)) = self.prefixurl.as_ref() {
             config.proxy = Some(prefixurl.clone());
         }
+
         Ok(config)
     }
 }
@@ -123,30 +127,45 @@ impl Subcommand {
         }
         Ok(origin_url)
     }
-    async fn pull(&self, cwd: &Path) -> Result<()> {
+
+    async fn pull<'t>(&self, target: &'t PathBuf) -> Result<&'t PathBuf> {
         let useurl = self.fixurl().await?;
-        println!("# {}\t{}", cwd.display(), useurl);
+        let _ = scopeguard::guard(target.canonicalize(), |wd| {
+            println!("#=== {}\t{}", wd.unwrap().display(), useurl);
+        });
+        println!("# {}", target.display(),);
         git_pull().await?;
-        println!("#=== {}\t{}", cwd.display(), useurl);
-        Ok(())
+        // println!(
+        //     "#=== {}\t{}",
+        //     target.canonicalize().unwrap().display(),
+        //     useurl
+        // );
+        Ok(target)
+    }
+    async fn pull_eachone<'t>(&self, target: &'t PathBuf, cwd: &'t PathBuf) -> Result<&'t PathBuf> {
+        // let cwd = std::env::current_dir().unwrap();
+        if target == cwd {
+            self.pull(cwd).await
+        } else {
+            _ = scopeguard::guard(cwd.clone(), |cwd| {
+                std::env::set_current_dir(&cwd).unwrap();
+            });
+            std::env::set_current_dir(target).unwrap();
+            self.pull(target).await
+        }
     }
     async fn main(&self) -> Result<()> {
+        use itertools::Itertools;
+        let repos: Vec<_> = self.repos.iter().unique().collect();
         let cwd = std::env::current_dir().unwrap();
-        println!("###=== {}\t{:?}", cwd.display(), self.repo);
-        if self.repo.is_empty() {
-            self.pull(&cwd).await?;
-        } else {
-            for target in self.repo.as_slice() {
-                if target == &cwd {
-                    self.pull(&cwd).await?
-                } else {
-                    _ = scopeguard::guard(cwd.clone(), |cwd| {
-                        std::env::set_current_dir(&cwd).unwrap();
-                    });
-                    std::env::set_current_dir(target).unwrap();
-                    self.pull(target).await?
-                }
-            }
+        println!("###=== {}\t{:?}", cwd.display(), repos);
+        if repos.is_empty() {
+            return self.pull(&cwd).await.map(|_| ());
+        }
+        let res = repos.iter().map(|target| self.pull_eachone(target, &cwd)); //.reduce()
+        let res = futures::future::join_all(res).await;
+        for err in res.iter().filter(|x| x.is_err()) {
+            println!("{err:?}");
         }
         return Ok(());
         // //let url = git_config_get_remote_origin_url().await?;
