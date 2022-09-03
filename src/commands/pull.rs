@@ -19,6 +19,8 @@ use std::{
 //use futures::stream::Stream;
 //use futures_async_stream::stream;
 
+use futures::AsyncReadExt;
+use itertools::Itertools;
 use tokio::process;
 
 use std::process::{ExitStatus, Stdio};
@@ -128,46 +130,73 @@ impl Subcommand {
         Ok(origin_url)
     }
 
-    async fn pull<'t>(&self, target: &'t PathBuf) -> Result<&'t PathBuf> {
-        let useurl = self.fixurl().await?;
-        let _ = scopeguard::guard(target.canonicalize(), |wd| {
-            println!("#=== {}\t{}", wd.unwrap().display(), useurl);
-        });
-        println!("# {}", target.display(),);
+    async fn pull<'t>(&self, target: &'t PathBuf) -> Result<()> {
+        // println!("# {}", target.canonicalize().unwrap().display(),);
         git_pull().await?;
-        // println!(
-        //     "#=== {}\t{}",
-        //     target.canonicalize().unwrap().display(),
-        //     useurl
-        // );
-        Ok(target)
+        _ = git_log_1().await;
+        //println!("#=== {}\t{}",target.canonicalize().unwrap().display(),useurl);
+        Ok(())
     }
-    async fn pull_eachone<'t>(&self, target: &'t PathBuf, cwd: &'t PathBuf) -> Result<&'t PathBuf> {
-        // let cwd = std::env::current_dir().unwrap();
-        if target == cwd {
-            self.pull(cwd).await
-        } else {
-            _ = scopeguard::guard(cwd.clone(), |cwd| {
-                std::env::set_current_dir(&cwd).unwrap();
-            });
-            std::env::set_current_dir(target).unwrap();
-            self.pull(target).await
-        }
-    }
-    async fn main(&self) -> Result<()> {
-        use itertools::Itertools;
-        let repos: Vec<_> = self.repos.iter().unique().collect();
-        let cwd = std::env::current_dir().unwrap();
-        println!("###=== {}\t{:?}", cwd.display(), repos);
-        if repos.is_empty() {
-            return self.pull(&cwd).await.map(|_| ());
-        }
-        let res = repos.iter().map(|target| self.pull_eachone(target, &cwd)); //.reduce()
-        let res = futures::future::join_all(res).await;
-        for err in res.iter().filter(|x| x.is_err()) {
-            println!("{err:?}");
-        }
+    async fn pull_eachone<'t, 'k>(&self, target: &'t PathBuf, cwd: &'k PathBuf) -> Result<()> {
+        let remote_url = self.fixurl().await?;
+        println!(
+            "#=== {}\t{}",
+            target.canonicalize().unwrap().display(),
+            remote_url
+        );
+
+        self.pull(target).await?;
+        println!(
+            "#=== {}\t{}",
+            target.canonicalize().unwrap().display(),
+            remote_url
+        );
         return Ok(());
+    }
+
+    async fn proc<'t, 'k, U>(&self, repos: U, cwd: &'k PathBuf) -> Result<()>
+    where
+        U: IntoIterator<Item = &'t PathBuf>,
+    {
+        for repo in repos {
+            std::env::set_current_dir(&repo).unwrap();
+            if let Err(err) = self.pull_eachone(repo, cwd).await {
+                println!("{err:?}");
+            }
+            println!("\t\t\t<>\t\t\t</>");
+            std::env::set_current_dir(&cwd).unwrap();
+        }
+        // let res = repos.map(|target| self.pull_eachone(target, cwd)); //.reduce()
+        // let res = futures::future::join_all(res).await;
+        // for err in res.iter().filter(|x| x.is_err()) {}
+
+        // let cols = a.zip_with(b, |a, b| a.iter().chain(b.iter()));
+        // cols.and_then(|a| {});
+        // if !repos.is_empty() {
+        //     println!("###=== {}\t{:?}", cur_dir.display(), repos);
+        // }
+        return Ok(());
+    }
+
+    //use std::slice::Concat;
+    async fn main(&self) -> Result<()> {
+        let cwd = std::env::current_dir().unwrap();
+        // let (curs, repos): (Vec<_>, Vec<_>) = self.repos.iter().unique().partition(|&x| x == &cur_dir); //.collect();
+
+        let mut ab = self.repos.splitn(2, |x| x == &cwd); //.collect();
+        let a = ab.next();
+        let b = ab.next();
+        return match (a, b) {
+            (Some(a), Some(b)) => self.proc(a.iter().chain(b.iter()), &cwd).await,
+            (Some(a), None) => self.proc(a.iter(), &cwd).await,
+            (None, Some(b)) => self.proc(b.iter(), &cwd).await,
+            _ => self.pull(&cwd).await.map(|_| ()),
+        };
+
+        // if a.is_none() && b.is_none() {
+        //     _ = self.pull(&cur_dir).await?; //.map(|_| ());
+        // }
+
         // //let url = git_config_get_remote_origin_url().await?;
         // println!("# {}\t{}", current_dir.display(), useurl);
         // //defer! {}
@@ -422,7 +451,6 @@ async fn git_pull() -> Result<()> {
     // });
     git_fetch().await?.exit_ok()?;
     git_merge().await?.exit_ok()?;
-    git_log_1().await?.exit_ok()?;
     Ok(())
 }
 
