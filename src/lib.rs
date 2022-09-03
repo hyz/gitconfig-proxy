@@ -15,6 +15,7 @@
     unused_lifetimes,
     unused_qualifications
 )]
+#![feature(bool_to_option)]
 
 pub mod application;
 pub mod commands;

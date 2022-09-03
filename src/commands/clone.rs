@@ -41,11 +41,9 @@ type Result<T, E = crate::error::Error> = std::result::Result<T, E>;
 #[derive(Debug)]
 struct PrefixUrl(Option<Url>);
 fn parse_prefixurl(s: &str) -> Result<PrefixUrl> {
-    Ok(PrefixUrl(if s.is_empty() {
-        None
-    } else {
-        Some(Url::parse(s)?)
-    }))
+    let u = (!s.is_empty()).then_some(Url::parse(s)?);
+    //let u = if s.is_empty() { None } else { Some(Url::parse(s)?) };
+    Ok(PrefixUrl(u))
 }
 
 #[derive(Command, Debug, Parser)]
@@ -96,13 +94,20 @@ impl config::Override<GixConfig> for Subcommand {
 
 impl Subcommand {
     async fn fixurl(&self) -> Result<Url> {
-        let config = APP.config();
-        let prefixurl = config.proxy.as_ref();
+        fn proxied_url(mut pfx: Url, url: &Url) -> Url {
+            pfx.set_path(url.as_str());
+            pfx
+        }
 
-        if let Some(Some(proxy)) = prefixurl {
-            let origin = prefix_url(proxy.clone(), &self.url);
+        let config = APP.config();
+
+        let proxy = config.proxy.as_ref();
+        if let Some(Some(proxy)) = proxy {
+            let origin = proxied_url(proxy.clone(), &self.url);
             return Ok(git_config_remote_origin_url(origin).await);
         }
+        if self.url.scheme() == "git" {}
+
         Ok(self.url.clone())
     }
     async fn clone(&self) -> Result<()> {
@@ -206,10 +211,6 @@ impl Subcommand {
 
     //     // run(&mut gitx, None).await
     // }
-}
-fn prefix_url(mut pfx: Url, url: &Url) -> Url {
-    pfx.set_path(url.as_str());
-    pfx
 }
 
 //static NOT_FOUND: Error = Error::from(io::Error::from(io::ErrorKind::NotFound));

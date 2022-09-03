@@ -1,6 +1,6 @@
 [package]
 name = "git-clonepull"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["jywww <jywww@qq.com>"]
 edition = "2021"
 
@@ -21,7 +21,7 @@ directories = "4"
 #glob = "*"
 #futures = "0.3"
 #config = { version = "0.13", features = ["ron"] }
-ron = { version = "0.7" }
+ron = { version = "0.8" }
 
 [dependencies.tokio]
 version = "1"

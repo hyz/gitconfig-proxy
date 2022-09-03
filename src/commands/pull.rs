@@ -55,7 +55,7 @@ pub struct Subcommand {
     prefixurl: Option<PrefixUrl>,
     /// repo directory
     #[clap(parse(from_os_str), value_hint = clap::ValueHint::DirPath)]
-    repo: Option<PathBuf>,
+    repo: Vec<PathBuf>,
 }
 
 impl Runnable for Subcommand {
@@ -94,23 +94,23 @@ impl Subcommand {
         let path = origin_url.path();
 
         if let Some(proxyurl) = proxyurl {
-            let orig =
-                if origin_url.scheme() == "git" && origin_url.host() == Some(Host::Domain("github.com")) {
-                    let base = Url::parse("https://github.com/").ok();
-                    Url::options().base_url(base.as_ref()).parse(path).unwrap()
-                    //useurl.set_scheme("https")
-                } else {
-                    origin_url.clone()
-                };
             let orig = if path.starts_with("/https:") || path.starts_with("/http:") {
                 Url::parse(path.strip_prefix('/').unwrap())?
             } else {
-                orig
+                if origin_url.scheme() == "git" {
+                    if origin_url.host() != Some(Host::Domain("github.com")) {
+                        eprintln!("{:?}", origin_url.host_str());
+                    }
+                    let base = Url::parse("https://github.com/").ok();
+                    Url::options().base_url(base.as_ref()).parse(path).unwrap()
+                } else {
+                    origin_url.clone()
+                }
             };
 
             if proxyurl.is_none() {
                 if orig.scheme() != origin_url.scheme() || orig.host() != origin_url.host() {
-                    // - remove proxyurl
+                    // - reset origin to 'https://github...'
                     return Ok(git_config_remote_origin_url(orig).await);
                 }
             } else if let Some(proxy) = proxyurl {
@@ -133,19 +133,22 @@ impl Subcommand {
     async fn main(&self) -> Result<()> {
         let cwd = std::env::current_dir().unwrap();
         println!("###=== {}\t{:?}", cwd.display(), self.repo);
-        if let Some(target) = self.repo.as_ref() {
-            if target == &cwd {
-                self.pull(&cwd).await
-            } else {
-                let _scope = scopeguard::guard(cwd.clone(), |cwd| {
-                    std::env::set_current_dir(&cwd).unwrap();
-                });
-                std::env::set_current_dir(target).unwrap();
-                self.pull(target).await
-            }
+        if self.repo.is_empty() {
+            self.pull(&cwd).await?;
         } else {
-            self.pull(&cwd).await
+            for target in self.repo.as_slice() {
+                if target == &cwd {
+                    self.pull(&cwd).await?
+                } else {
+                    _ = scopeguard::guard(cwd.clone(), |cwd| {
+                        std::env::set_current_dir(&cwd).unwrap();
+                    });
+                    std::env::set_current_dir(target).unwrap();
+                    self.pull(target).await?
+                }
+            }
         }
+        return Ok(());
         // //let url = git_config_get_remote_origin_url().await?;
         // println!("# {}\t{}", current_dir.display(), useurl);
         // //defer! {}
