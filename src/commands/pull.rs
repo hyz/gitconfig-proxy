@@ -144,7 +144,6 @@ impl Subcommand {
             target.canonicalize().unwrap().display(),
             remote_url
         );
-
         self.pull(target).await?;
         println!(
             "#=== {}\t{}",
@@ -154,7 +153,7 @@ impl Subcommand {
         return Ok(());
     }
 
-    async fn proc<'t, 'k, U>(&self, repos: U, cwd: &'k PathBuf) -> Result<()>
+    async fn repos_each<'t, 'k, U>(&self, repos: U, cwd: &'k PathBuf) -> Result<()>
     where
         U: IntoIterator<Item = &'t PathBuf>,
     {
@@ -186,11 +185,13 @@ impl Subcommand {
         let mut ab = self.repos.splitn(2, |x| x == &cwd); //.collect();
         let a = ab.next();
         let b = ab.next();
+        println!("ab {:?} {:?}", a, b);
         return match (a, b) {
-            (Some(a), Some(b)) => self.proc(a.iter().chain(b.iter()), &cwd).await,
-            (Some(a), None) => self.proc(a.iter(), &cwd).await,
-            (None, Some(b)) => self.proc(b.iter(), &cwd).await,
-            _ => self.pull(&cwd).await.map(|_| ()),
+            (None | Some([]), None | Some([])) => self.pull(&cwd).await.map(|_| ()),
+            (Some(a), Some(b)) => self.repos_each(a.iter().chain(b.iter()), &cwd).await,
+            (Some(a), None) => self.repos_each(a.iter(), &cwd).await,
+            (None, Some(b)) => self.repos_each(b.iter(), &cwd).await,
+            // _ => self.pull(&cwd).await.map(|_| ()),
         };
 
         // if a.is_none() && b.is_none() {
